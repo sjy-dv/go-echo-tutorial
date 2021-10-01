@@ -13,6 +13,7 @@ import (
 	"github.com/labstack/echo/middleware"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 type RequestBody struct {
@@ -24,9 +25,20 @@ type querybody struct {
 	Age int `json:"age"`
 }
 
+type Board struct {
+	Idx          int       `gorm:"primary_key;auto_increment;not null" json:"idx"`
+	Title string `json:"title"`
+	Desc string `json:"desc"`
+	Writer string `json:"writer"`
+}
+
 func DBConnection() {
 	host := "root:1111@tcp(127.0.0.1:3306)/rootdb?charset=utf8mb4&parseTime=True&loc=Local"
-	db, err := gorm.Open(mysql.Open(host), &gorm.Config{})
+	db, err := gorm.Open(mysql.Open(host), &gorm.Config{
+		NamingStrategy: schema.NamingStrategy{
+			SingularTable: true,
+		},
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -92,6 +104,31 @@ func ParamsTest(c echo.Context) error {
 	})
 }
 
+
+func CreatePost(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) error {
+		
+		body, _ := ioutil.ReadAll(c.Request().Body)
+		req := Board{}
+		json.Unmarshal(body, &req)
+		db.Model(&Board{}).Create(&req)
+
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"result" : "success",
+		})
+	}
+}
+
+func GetPost(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) error {
+		idx, _ := strconv.Atoi(c.Param("idx"))
+		board := Board{}
+		db.First(&board, "idx = ?", idx)
+		//fmt.Println(rows)
+		return c.JSON(http.StatusOK, &board)
+	}
+}
+
 func main() {
 	DBConnection()	
 }
@@ -110,5 +147,12 @@ func handlerouting(db *gorm.DB) {
 	e.GET("/q1", EachQueryTest)
 	e.GET("/q2", MulQueryTest)
 	e.GET("/p/:num", ParamsTest)
+
+	e2 := e.Group("/api/db")
+
+	e2.POST("/c_post", CreatePost(db))
+	e2.GET("/g_post/:idx", GetPost(db))
+
+
 	e.Logger.Fatal(e.Start(":8081"))
 }
