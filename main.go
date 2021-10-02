@@ -22,14 +22,20 @@ type RequestBody struct {
 
 type querybody struct {
 	Name string `json:"name"`
-	Age int `json:"age"`
+	Age  int    `json:"age"`
 }
 
 type Board struct {
-	Idx          int       `gorm:"primary_key;auto_increment;not null" json:"idx"`
-	Title string `json:"title"`
-	Desc string `json:"desc"`
+	gorm.Model
+	Title  string `json:"title"`
+	Desc   string `json:"desc"`
 	Writer string `json:"writer"`
+}
+
+type BoardBody struct {
+	Id    int    `json:"id"`
+	Title string `json:"title"`
+	Desc  string `json:"desc"`
 }
 
 func DBConnection() {
@@ -42,6 +48,8 @@ func DBConnection() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	db.AutoMigrate(&Board{})
 
 	handlerouting(db)
 
@@ -58,7 +66,7 @@ func DBConnection() {
 
 func HelloWorld(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"result" : "hello world~!!",
+		"result": "hello world~!!",
 	})
 }
 
@@ -70,7 +78,7 @@ func BodyPostTest(c echo.Context) error {
 	json.Unmarshal(body, &req)
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"result" : req.Message,
+		"result": req.Message,
 	})
 }
 
@@ -81,18 +89,18 @@ func EachQueryTest(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, querybody{
 		Name: first_query,
-		Age: second_query,
+		Age:  second_query,
 	})
 }
 
 func MulQueryTest(c echo.Context) error {
 	req := c.QueryParams()
 	first_query := req["name"][0]
-	second_query, _ := strconv.Atoi(req["age"][0]) 
+	second_query, _ := strconv.Atoi(req["age"][0])
 
 	return c.JSON(http.StatusOK, querybody{
 		Name: first_query,
-		Age: second_query,
+		Age:  second_query,
 	})
 }
 
@@ -100,37 +108,111 @@ func ParamsTest(c echo.Context) error {
 	req := c.Param("num")
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"result" : fmt.Sprintf("받은 값 : %s", req),
+		"result": fmt.Sprintf("받은 값 : %s", req),
 	})
 }
 
-
 func CreatePost(db *gorm.DB) func(echo.Context) error {
 	return func(c echo.Context) error {
-		
+
 		body, _ := ioutil.ReadAll(c.Request().Body)
 		req := Board{}
 		json.Unmarshal(body, &req)
-		db.Model(&Board{}).Create(&req)
-
+		err := db.Debug().Model(&Board{}).Create(&req).Error
+		if err != nil {
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"result": "fail",
+			})
+		}
 		return c.JSON(http.StatusOK, map[string]interface{}{
-			"result" : "success",
+			"result": "success",
 		})
 	}
 }
 
-func GetPost(db *gorm.DB) func(echo.Context) error {
+func GetPostParam(db *gorm.DB) func(echo.Context) error {
 	return func(c echo.Context) error {
-		idx, _ := strconv.Atoi(c.Param("idx"))
+		id, _ := strconv.Atoi(c.Param("id"))
 		board := Board{}
-		db.First(&board, "idx = ?", idx)
+		err := db.Debug().First(&board, "id = ?", id).Error
 		//fmt.Println(rows)
+		if err != nil {
+			return c.JSON(http.StatusOK, &Board{})
+		}
 		return c.JSON(http.StatusOK, &board)
 	}
 }
 
+func GetPostQuery(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) error {
+		id, _ := strconv.Atoi(c.QueryParam("id"))
+		board := Board{}
+		err := db.Debug().First(&board, "id = ?", id).Error
+		if err != nil {
+			return c.JSON(http.StatusOK, &Board{})
+		}
+		return c.JSON(http.StatusOK, &board)
+	}
+}
+
+func GetAllPost(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) error {
+		page, _ := strconv.Atoi(c.QueryParam("page"))
+		offset := 0
+		if page > 1 {
+			offset = 10 * (page - 1)
+		}
+		boards := []Board{}
+		err := db.Debug().Model(&Board{}).Limit(10).Offset(offset).Scan(&boards).Error
+
+		if err != nil {
+			return c.JSON(http.StatusOK, &[]Board{})
+		}
+		return c.JSON(http.StatusOK, &boards)
+	}
+}
+
+func UpdatePost(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) error {
+		body, _ := ioutil.ReadAll(c.Request().Body)
+		req := BoardBody{}
+		json.Unmarshal(body, &req)
+
+		err := db.Debug().Model(&Board{}).Where("id = ?", req.Id).Updates(Board{
+			Title: req.Title,
+			Desc:  req.Desc,
+		}).Error
+		if err != nil {
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"result": "fail",
+			})
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"result": "success",
+		})
+	}
+}
+
+func DeletePost(db *gorm.DB) func(echo.Context) error {
+	return func(c echo.Context) error {
+		body, _ := ioutil.ReadAll(c.Request().Body)
+		req := BoardBody{}
+		json.Unmarshal(body, &req)
+
+		err := db.Debug().Delete(&Board{}, req.Id)
+		if err != nil {
+			return c.JSON(http.StatusOK, map[string]interface{}{
+				"result": "fail",
+			})
+		}
+		return c.JSON(http.StatusOK, map[string]interface{}{
+			"result": "success",
+		})
+	}
+}
+
 func main() {
-	DBConnection()	
+	DBConnection()
 }
 
 func handlerouting(db *gorm.DB) {
@@ -151,8 +233,10 @@ func handlerouting(db *gorm.DB) {
 	e2 := e.Group("/api/db")
 
 	e2.POST("/c_post", CreatePost(db))
-	e2.GET("/g_post/:idx", GetPost(db))
-
-
+	e2.GET("/g_post/:id", GetPostParam(db))
+	e2.GET("/g_qpost", GetPostQuery(db))
+	e2.GET("/g_all", GetAllPost(db))
+	e2.POST("/u_post", UpdatePost(db))
+	e2.POST("/d_post", DeletePost(db))
 	e.Logger.Fatal(e.Start(":8081"))
 }
