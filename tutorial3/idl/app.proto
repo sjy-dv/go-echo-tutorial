@@ -1,0 +1,69 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "../pb";
+
+message ProtoUser {
+    uint32 ID = 1;
+    string userid = 2;
+    string username = 3;
+    string password = 4;
+}
+
+message ProtoShop {
+    uint32 ID = 1;
+    string userid = 2;
+    string shopname = 3;
+    string shop_info = 4;
+}
+
+message ReqProtoUser {
+    string userid = 1;
+    string username = 2;
+    string password = 3;
+}
+
+message InfoProtoUser {
+    string userid = 1;
+}
+
+message LoginProto {
+    string userid = 1;
+    string password = 2;
+}
+
+message Response {
+    string result = 1;
+}
+
+message ResToken {
+    string token = 1;
+}
+
+message QueryPage {
+    int32 page = 1;
+}
+/*
+
+message ProtoUsers {
+    repeated string userid = 1;
+    repeated string username = 2;
+    repeated string password = 3;
+}
+*/
+
+message ProtoUsers {
+    repeated ProtoUser protoUser = 1;
+}
+
+service gRpcApp {
+    rpc SignUp(ReqProtoUser) returns (Response){}
+    rpc SignIn(LoginProto) returns (ResToken) {}
+    rpc UserInfo(ResToken) returns (ProtoUser) {}
+    rpc AllUser(QueryPage) returns (ProtoUsers) {}
+
+}
+
+
+// protoc --go_out=../pb --go-grpc_out=../pb app.proto
